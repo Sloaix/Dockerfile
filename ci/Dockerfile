@@ -17,6 +17,7 @@ RUN echo -e 'https://dl-cdn.alpinelinux.org/alpine/edge/main\nhttps://dl-cdn.alp
     'go>1.17' \
     'ffmpeg>4.4' \
     tzdata \
+    docker \
     npm \
     yarn \
     openjdk17 \
