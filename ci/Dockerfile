@@ -16,6 +16,7 @@ RUN echo -e 'https://dl-cdn.alpinelinux.org/alpine/edge/main\nhttps://dl-cdn.alp
     'nodejs>14' \
     'go>1.17' \
     'ffmpeg>4.4' \
+    sshpass \
     tzdata \
     docker \
     npm \
@@ -31,7 +32,7 @@ RUN echo -e 'https://dl-cdn.alpinelinux.org/alpine/edge/main\nhttps://dl-cdn.alp
     # 软链接到/usr/local/bin
     && ln -s /usr/bin/pg_dump /usr/local/bin/pg_dump \
     # 配置npm使用国内镜像源
-    && npm i -g nrm && nrm use tencent \
+    && npm i -g nrm && nrm use taobao \
     # 配置go使用国内镜像源
     && go env -w GO111MODULE=on && go env -w GOPROXY=https://goproxy.cn,direct \
     # 配置python国内镜像源
