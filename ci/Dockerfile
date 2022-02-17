@@ -37,6 +37,8 @@ RUN echo -e 'https://dl-cdn.alpinelinux.org/alpine/edge/main\nhttps://dl-cdn.alp
     && go env -w GO111MODULE=on && go env -w GOPROXY=https://goproxy.cn,direct \
     # 配置python国内镜像源
     && pip3 config set global.index-url https://mirrors.cloud.tencent.com/pypi/simple \
+    # 安装python需要使用到的库
+    && pip3 install requests arrow \
     # 配置时区
     && echo "${TIME_ZONE}" > /etc/timezone && ln -sf /usr/share/zoneinfo/${TIME_ZONE} /etc/localtime && date
 CMD [ "/bin/bash" ]
