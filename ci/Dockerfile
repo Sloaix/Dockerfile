@@ -11,7 +11,7 @@ RUN echo -e 'https://dl-cdn.alpinelinux.org/alpine/edge/main\nhttps://dl-cdn.alp
     && apk update \
     # 安装最新版本的软件
     && apk --no-cache add \
-    'postgresql14-client>14' \
+    'postgresql15-client>15' \
     'fish>3.3' \
     'nodejs>14' \
     'go>1.19' \
