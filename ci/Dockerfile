@@ -1,4 +1,4 @@
-FROM alpine:3.17
+FROM alpine:3.18
 
 #定义时区环境变量
 ENV  TIME_ZONE Asia/Shanghai
@@ -13,8 +13,8 @@ RUN echo -e 'https://dl-cdn.alpinelinux.org/alpine/edge/main\nhttps://dl-cdn.alp
     && apk --no-cache add \
     'postgresql15-client>15' \
     'fish>3.3' \
-    'nodejs>14' \
-    'go>1.19' \
+    'nodejs>18' \
+    'go>1.20' \
     'ffmpeg>5.0' \
     sshpass \
     tzdata \
