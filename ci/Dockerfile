@@ -1,7 +1,7 @@
-FROM denoland/deno:alpine-1.36.1
+FROM alpine:3.20.1
 
 #定义时区环境变量
-ENV  TIME_ZONE Asia/Shanghai
+ENV  TIME_ZONE=Asia/Shanghai
 
 # 添加edge软件源
 RUN \
@@ -12,7 +12,10 @@ RUN \
     && apk update \
     # 安装最新版本的软件
     && apk --no-cache add \
-    'postgresql15-client>15' \
+    'postgresql16-client>16' \
+    'deno>=1.43.5' \
+    'deno-bash-completion>=1.43.5' \
+    'deno-fish-completion>=1.43.5' \
     'fish>3.3' \
     'nodejs>18' \
     'go>1.20' \
@@ -33,12 +36,15 @@ RUN \
     bash \
     rsync \
     && echo "apk install successed" \
-    # 软链接到/usr/local/bin
-    && ln -s /usr/bin/pg_dump /usr/local/bin/pg_dump \
-    # 配置npm使用国内镜像源
-    && npm i -g nrm && nrm use taobao \
     # 安装pnpm
     && npm i -g pnpm \
+    && echo "pnpm install successed" \
+    # 软链接到/usr/local/bin
+    && ln -s /usr/bin/pg_dump /usr/local/bin/pg_dump \
+    && echo "ln -s pg_dump successed" \
+    # 配置npm使用国内镜像源
+    && npm i -g nrm && nrm use taobao \
+    && echo "npm config successed" \
     # 配置go使用国内镜像源
     && go env -w GO111MODULE=on && go env -w GOPROXY=https://goproxy.cn,direct \
     # 配置python国内镜像源
