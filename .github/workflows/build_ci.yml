@@ -1,42 +1,49 @@
-name: Build ci
+name: Validate CI image
 
+# Pull Request 和 master 推送都会构建并测试镜像，但不会登录或发布到 Docker Hub。
+# 正式发布由 release.yml 的手动工作流负责，避免错误 Git 标签触发意外发布。
 on:
+  pull_request:
   push:
-    tags:
-      - "v*.*.*"
+    branches:
+      - master
+
+# 验证任务只需要读取仓库内容。
+permissions:
+  contents: read
+
+# 同一个分支有新提交时取消尚未完成的旧任务，优先验证最新代码。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    # 防止网络或软件仓库异常导致任务无限等待并持续消耗 Actions 分钟数。
+    timeout-minutes: 45
+
     steps:
-      # 检出代码
-      - name: Checkout Trigger Branch
-        uses: actions/checkout@v2
+      # 拉取触发本次验证的提交。
+      - name: Checkout repository
+        uses: actions/checkout@v6
 
-      # 获取tag
-      - name: Set env
-        run: echo "TAG=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
-
-      # 登录到Docker hub
-      - name: Login to Docker Hub
-        uses: docker/login-action@v1
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
-
-      # 配置Buildx
+      # 创建独立 BuildKit builder，以支持 GitHub Actions 构建缓存。
       - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v4
 
-      # 构建镜像并且推送到hub
-      - name: Build and push
-        id: docker_build
-        uses: docker/build-push-action@v2
+      # 把镜像加载到 Runner 的本地 Docker Engine，供下一步冒烟测试使用。
+      # PR 可以读取缓存但不写入缓存，避免来自 Fork 的任务遇到缓存权限问题。
+      - name: Build image for verification
+        uses: docker/build-push-action@v7
         with:
           context: ./ci
-          push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/ci:latest,${{ secrets.DOCKER_USERNAME }}/ci:${{ env.TAG }}
+          load: true
+          tags: local/ci:test
+          pull: true
+          cache-from: type=gha,scope=ci-image
+          cache-to: ${{ github.event_name != 'pull_request' && 'type=gha,mode=max,scope=ci-image' || '' }}
 
-      - name: Image digest
-        run: echo ${{ steps.docker_build.outputs.digest }}
+      # 任何命令缺失、模块导入失败或配置错误都会让验证任务失败。
+      - name: Run smoke tests
+        run: ./ci/test.sh local/ci:test

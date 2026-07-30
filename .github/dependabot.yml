@@ -1,0 +1,18 @@
+# Dependabot 配置格式版本。该版本号不是 Dependabot 软件版本。
+version: 2
+
+updates:
+  # 每周检查 .github/workflows 中引用的 Actions 是否发布了新版本。
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    # 限制同时打开的升级 PR，避免依赖更新淹没正常开发工作。
+    open-pull-requests-limit: 5
+
+  # 每周检查 ci/Dockerfile 中的 FROM alpine:... 基础镜像标签。
+  - package-ecosystem: docker
+    directory: /ci
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5

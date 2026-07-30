@@ -1,0 +1,159 @@
+name: Release CI image
+
+# 发布只能从 GitHub Actions 页面手动启动。
+# 操作者只选择升级级别，不再手工输入 Docker 版本或创建 Git 标签。
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Semantic version part to increment
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+# checkout 使用 GITHUB_TOKEN 推送发布标签，因此需要 contents: write。
+# Docker Hub 仍使用 DOCKER_USERNAME 和 DOCKER_ACCESS_TOKEN，不使用此权限。
+permissions:
+  contents: write
+
+# 同一时间只允许一个发布任务计算版本和推送镜像，避免两个任务得到相同版本号。
+concurrency:
+  group: ci-image-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      # fetch-depth: 0 会取回完整历史和标签，版本计算不能依赖浅克隆。
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      # 发布必须从 master 启动，防止 Actions 页面误选功能分支。
+      - name: Require master branch
+        run: |
+          if [[ "${GITHUB_REF}" != "refs/heads/master" ]]; then
+            echo "Releases must be started from the master branch."
+            exit 1
+          fi
+
+      # 从最新的严格语义化 Git 标签计算下一版本。
+      # 例如当前为 v1.2.9：patch -> v1.2.10，minor -> v1.3.0，major -> v2.0.0。
+      # 新版本通过 step output 传给后续步骤，全流程只有这一处负责生成版本号。
+      - name: Calculate next version
+        id: version
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          latest_tag="$(git tag --list 'v*.*.*' --sort=-version:refname | sed -n '1p')"
+          latest_tag="${latest_tag:-v0.0.0}"
+
+          if [[ ! "${latest_tag}" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "Latest tag is not a valid semantic version: ${latest_tag}"
+            exit 1
+          fi
+
+          major=$((10#${BASH_REMATCH[1]}))
+          minor=$((10#${BASH_REMATCH[2]}))
+          patch=$((10#${BASH_REMATCH[3]}))
+
+          case "${BUMP}" in
+            major)
+              ((major += 1))
+              minor=0
+              patch=0
+              ;;
+            minor)
+              ((minor += 1))
+              patch=0
+              ;;
+            patch)
+              ((patch += 1))
+              ;;
+            *)
+              echo "Unsupported version increment: ${BUMP}"
+              exit 1
+              ;;
+          esac
+
+          next_tag="v${major}.${minor}.${patch}"
+          if git show-ref --tags --verify --quiet "refs/tags/${next_tag}"; then
+            echo "Tag already exists: ${next_tag}"
+            exit 1
+          fi
+
+          echo "tag=${next_tag}" >> "${GITHUB_OUTPUT}"
+          echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${GITHUB_OUTPUT}"
+          echo "Releasing ${latest_tag} -> ${next_tag}" >> "${GITHUB_STEP_SUMMARY}"
+
+      # 正式发布不复用旧软件安装层，确保 Alpine 仓库中的包得到刷新。
+      # 构建结果先加载到本地，只有冒烟测试通过后才允许登录和推送。
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build image without stale cache
+        uses: docker/build-push-action@v7
+        with:
+          context: ./ci
+          load: true
+          tags: local/ci:release-candidate
+          pull: true
+          no-cache: true
+          cache-to: type=gha,mode=max,scope=ci-release
+
+      - name: Test release candidate
+        run: ./ci/test.sh local/ci:release-candidate
+
+      # Docker Hub 凭据只会在构建和测试全部成功后使用。
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_ACCESS_TOKEN }}
+
+      # 复用刚刚验证过的构建缓存发布版本标签和 latest。
+      # OCI 动态标签记录版本、源码提交和构建时间，便于追溯镜像来源。
+      - name: Publish version and latest tags
+        id: publish
+        uses: docker/build-push-action@v7
+        with:
+          context: ./ci
+          push: true
+          cache-from: type=gha,scope=ci-release
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/ci:${{ steps.version.outputs.tag }}
+            ${{ secrets.DOCKER_USERNAME }}/ci:latest
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.tag }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.version.outputs.created }}
+          provenance: mode=max
+          sbom: true
+
+      # Git 标签是发布流程的最后一步。镜像发布失败时不会产生远端标签。
+      # 标签由计算结果生成，不需要人工输入，因此不会出现版本拼写错误。
+      - name: Create release tag
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag --annotate "${RELEASE_TAG}" --message "Release ${RELEASE_TAG}"
+          git push origin "refs/tags/${RELEASE_TAG}"
+
+      # 将最终版本和不可变镜像摘要写入 Actions 任务摘要。
+      - name: Write release summary
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          IMAGE_DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          echo "Published ${RELEASE_TAG}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "Image digest: ${IMAGE_DIGEST}" >> "${GITHUB_STEP_SUMMARY}"
