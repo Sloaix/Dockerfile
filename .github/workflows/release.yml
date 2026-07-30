@@ -33,7 +33,7 @@ jobs:
     steps:
       # fetch-depth: 0 会取回完整历史和标签，版本计算不能依赖浅克隆。
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
