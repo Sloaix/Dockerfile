@@ -1,6 +1,6 @@
 # 固定 Alpine 补丁版本，使基础系统升级成为显式、可审查的代码变更。
 # Dependabot 会定期检查该标签是否有更新。
-FROM alpine:3.24.1
+FROM alpine:3.24.2
 
 # 使用 OCI 标准标签描述镜像，便于 Docker Hub 和镜像扫描工具识别其用途与源码。
 LABEL org.opencontainers.image.title="sloaix/ci" \
